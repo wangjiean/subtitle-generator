@@ -1,0 +1,2399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频字幕提取 & AI 总结</title>
+    <link rel="icon" href="/favicon.ico" type="image/svg+xml">
+    <style>
+        /* ── 基础 ── */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            /* 默认：开心明亮（Warm Happy） */
+            --bg: #fff7ed;
+            --surface: #ffffff;
+            --surface2: #fff1e6;
+            --accent: #fb7185;
+            --accent2: #22c55e;
+            --text: #1f2937;
+            --text2: #6b7280;
+            --border: #fed7aa;
+            --success: #16a34a;
+            --error: #ef4444;
+            --warn: #f59e0b;
+            --text-strong: #111827;
+        }
+
+        /* 夜空（原来的蓝紫科幻风） */
+        :root[data-theme="night"] {
+            --bg: #0f0f0f;
+            --surface: #1a1a2e;
+            --surface2: #16213e;
+            --accent: #7c3aed;
+            --accent2: #a78bfa;
+            --text: #e2e8f0;
+            --text2: #94a3b8;
+            --border: #2d2d44;
+            --success: #10b981;
+            --error: #ef4444;
+            --warn: #f59e0b;
+            --text-strong: #ffffff;
+        }
+
+        /* 糖果（更活泼的浅色主题） */
+        :root[data-theme="candy"] {
+            --bg: #fdf2f8;
+            --surface: #ffffff;
+            --surface2: #fff7fb;
+            --accent: #a78bfa;
+            --accent2: #fb7185;
+            --text: #1f2937;
+            --text2: #6b7280;
+            --border: #fbcfe8;
+            --success: #22c55e;
+            --error: #ef4444;
+            --warn: #f59e0b;
+            --text-strong: #111827;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── 顶栏 ── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 24px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            height: 64px;
+        }
+        .topbar .logo {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            white-space: nowrap;
+        }
+        .url-input-wrap {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+        }
+        .url-input-wrap input {
+            flex: 1;
+            padding: 10px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        .url-input-wrap input:focus { border-color: var(--accent); }
+        .url-input-wrap input::placeholder { color: var(--text2); }
+        .btn-primary {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, var(--accent), #6d28d9);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .2s, transform .1s;
+            white-space: nowrap;
+        }
+        .btn-primary:hover { opacity: .9; }
+        .btn-primary:active { transform: scale(.97); }
+        .btn-primary:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+        .theme-select {
+            padding: 9px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+        .theme-select:focus { border-color: var(--accent); }
+        .layout-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-layout {
+            padding: 8px 10px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text2);
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn-layout:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        .btn-layout.active {
+            border-color: var(--accent);
+            color: var(--text);
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+        }
+
+        /* ── 状态条 ── */
+        .status-bar {
+            padding: 8px 24px;
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            color: var(--text2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 36px;
+        }
+        .status-bar .spinner {
+            width: 14px; height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .status-bar.success { color: var(--success); }
+        .status-bar.error { color: var(--error); }
+        .subtitle-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-official { background: #065f46; color: #6ee7b7; }
+        .badge-auto { background: #713f12; color: #fde047; }
+        .badge-whisper { background: #312e81; color: #a5b4fc; }
+
+        /* ── 主体双栏 ── */
+        .main {
+            display: flex;
+            height: calc(100vh - 64px - 36px);
+        }
+        .main-col { min-width: 0; }
+        #sidebarCol {
+            flex: 0 0 300px;
+            width: 300px;
+        }
+        #centerCol {
+            flex: 1 1 auto;
+            min-width: 320px;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        #chatCol {
+            flex: 0 0 420px;
+            width: 420px;
+        }
+        .main-col.hidden { display: none !important; }
+        .col-splitter {
+            flex: 0 0 8px;
+            width: 8px;
+            cursor: col-resize;
+            position: relative;
+            user-select: none;
+        }
+        .col-splitter::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 3px;
+            width: 2px;
+            background: var(--border);
+            transition: background .2s;
+        }
+        .col-splitter:hover::before { background: var(--accent); }
+        .col-splitter.hidden { display: none !important; }
+        .col-splitter.locked {
+            cursor: not-allowed;
+            opacity: .45;
+        }
+
+        /* ── 项目侧边栏 ── */
+        .sidebar {
+            width: 300px;
+            min-width: 260px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 14px 14px 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .sidebar-title {
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text);
+        }
+        .sidebar-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .btn-mini {
+            padding: 7px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text2);
+            font-size: 12px;
+            cursor: pointer;
+            transition: border-color .2s, color .2s, opacity .2s;
+            white-space: nowrap;
+        }
+        .btn-mini:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        /* 标签筛选栏 */
+        .tag-filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+        .tag-chip {
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text2);
+            cursor: pointer;
+            transition: all .25s;
+            white-space: nowrap;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0;
+        }
+        .tag-chip:hover {
+            border-color: var(--accent);
+            color: var(--text);
+            gap: 4px;
+        }
+        .tag-chip.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .tag-chip-add {
+            font-size: 13px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px dashed var(--border);
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .tag-chip-add:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .tag-count {
+            display: inline-block;
+            background: rgba(128,128,128,.18);
+            color: var(--text2);
+            font-size: 10px;
+            min-width: 16px;
+            text-align: center;
+            padding: 0 4px;
+            border-radius: 8px;
+            line-height: 16px;
+            margin-left: 2px;
+            font-weight: 600;
+        }
+        .tag-chip.active .tag-count {
+            background: rgba(255,255,255,.25);
+            color: inherit;
+        }
+        .project-thumb {
+            width: 80px;
+            height: 52px;
+            border-radius: 6px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: var(--border);
+        }
+        .tag-chip .tag-del {
+            font-size: 11px;
+            width: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: width .2s, opacity .2s;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .tag-chip:hover .tag-del {
+            width: 14px;
+            opacity: .7;
+        }
+        .tag-chip .tag-del:hover {
+            opacity: 1;
+            color: var(--error);
+        }
+        /* 项目卡片上的标签小标 */
+        .project-tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--accent) 15%, transparent);
+            color: var(--accent);
+            white-space: nowrap;
+        }
+        /* 日期分组标题 */
+        .date-group-header {
+            font-size: 11px;
+            color: var(--text2);
+            padding: 6px 4px 2px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            user-select: none;
+        }
+        /* 收藏按钮 */
+        .project-fav {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0 2px;
+            opacity: .35;
+            transition: opacity .2s, transform .15s;
+        }
+        .project-fav:hover {
+            opacity: .8;
+            transform: scale(1.2);
+        }
+        .project-fav.is-fav {
+            opacity: 1;
+            color: #d4a017;
+            font-size: 15px;
+        }
+        /* 可编辑标题 */
+        .video-title[contenteditable="true"] {
+            outline: none;
+            border-bottom: 1px dashed var(--accent);
+            cursor: text;
+            min-width: 100px;
+        }
+        .video-title[contenteditable="true"]:focus {
+            border-bottom-color: var(--accent2);
+        }
+        .title-edit-hint {
+            font-size: 10px;
+            color: var(--text2);
+            margin-left: 6px;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+        .video-title:hover + .title-edit-hint,
+        .video-title:focus + .title-edit-hint {
+            opacity: 1;
+        }
+        /* 项目详情中的标签选择器 */
+        .tag-selector {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 8px;
+        }
+        .tag-selector select {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .project-list {
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .project-list::-webkit-scrollbar { width: 6px; }
+        .project-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .project-item {
+            border: 1.5px solid color-mix(in srgb, var(--border) 80%, var(--text2));
+            background: var(--surface);
+            border-radius: 10px;
+            padding: 10px 10px;
+            cursor: pointer;
+            transition: border-color .2s, transform .05s, background .2s;
+        }
+        .project-item:hover {
+            border-color: var(--accent);
+            background: var(--surface2);
+        }
+        .project-item:active { transform: scale(.99); }
+        .project-item.active {
+            border-color: var(--accent);
+            background: var(--surface2);
+        }
+        .project-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .project-name {
+            font-size: 13px;
+            font-weight: 650;
+            color: var(--text);
+            line-height: 1.3;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .project-meta {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .project-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+        .project-right-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pill {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            color: var(--text2);
+            white-space: nowrap;
+        }
+        .pill-ok { border-color: rgba(16,185,129,.4); color: var(--success); }
+        .pill-w { border-color: rgba(124,58,237,.3); color: var(--accent); }
+        .pill-a { border-color: rgba(245,158,11,.4); color: var(--warn); }
+        .project-del {
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            padding: 0 4px;
+            font-size: 14px;
+            opacity: .7;
+        }
+        .project-del:hover { opacity: 1; color: #fca5a5; }
+        .project-empty {
+            padding: 18px 12px;
+            color: var(--text2);
+            font-size: 12px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* ── 左侧: 总结区 ── */
+        .panel-left {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+            border-right: 1px solid var(--border);
+        }
+        .panel-left::-webkit-scrollbar { width: 6px; }
+        .panel-left::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text2);
+            text-align: center;
+        }
+        .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+        .empty-state h2 { font-size: 20px; margin-bottom: 8px; color: var(--text); }
+        .empty-state p { font-size: 14px; line-height: 1.6; }
+
+        /* ── 视频信息卡片 ── */
+        .video-card {
+            display: flex;
+            gap: 14px;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,.04);
+            border-radius: 14px;
+            margin-bottom: 14px;
+            align-items: center;
+        }
+        .video-cover {
+            width: 128px;
+            height: 72px;
+            border-radius: 10px;
+            object-fit: cover;
+            border: 1px solid var(--border);
+            background: rgba(0,0,0,.1);
+            flex-shrink: 0;
+        }
+        .video-info {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .video-title {
+            font-weight: 750;
+            font-size: 14px;
+            color: var(--text);
+            line-height: 1.35;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .video-sub {
+            font-size: 12px;
+            color: var(--text2);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .video-link {
+            color: var(--accent2);
+            text-decoration: none;
+            border-bottom: 1px dashed color-mix(in srgb, var(--text2) 55%, transparent);
+        }
+        .video-link:hover { opacity: .9; }
+
+        .summary-cover-wrap {
+            margin: 0 0 14px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            background: rgba(0,0,0,.04);
+        }
+        .summary-cover-img {
+            width: 100%;
+            max-height: 360px;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* Markdown 渲染样式 */
+        .markdown-body { line-height: 1.8; }
+        .markdown-body h1 {
+            font-size: 26px; font-weight: 700;
+            margin: 0 0 16px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--accent);
+        }
+        .markdown-body h2 {
+            font-size: 20px; font-weight: 600;
+            margin: 28px 0 12px;
+            color: var(--accent2);
+        }
+        .markdown-body h3 {
+            font-size: 16px; font-weight: 600;
+            margin: 20px 0 8px;
+        }
+        .markdown-body p { margin: 8px 0; }
+        .markdown-body ul, .markdown-body ol {
+            margin: 8px 0; padding-left: 24px;
+        }
+        .markdown-body li { margin: 4px 0; }
+        .markdown-body strong { color: var(--text-strong); }
+        .markdown-body blockquote {
+            margin: 12px 0;
+            padding: 8px 16px;
+            border-left: 3px solid var(--accent);
+            background: color-mix(in srgb, var(--accent) 12%, transparent);
+            border-radius: 0 6px 6px 0;
+        }
+        .markdown-body code {
+            background: color-mix(in srgb, var(--accent) 16%, transparent);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 20px 0;
+        }
+
+        /* ── 左侧 Tab 切换 ── */
+        .tab-bar {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            padding: 0 24px;
+            gap: 0;
+            flex-shrink: 0;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text2);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: color .2s, border-color .2s;
+            white-space: nowrap;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active {
+            color: var(--accent2);
+            border-bottom-color: var(--accent);
+        }
+        .tab-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        /* ── 字幕面板 ── */
+        .transcript-panel {
+            padding: 16px 24px;
+            line-height: 1.7;
+        }
+        .transcript-line {
+            display: flex;
+            gap: 10px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            transition: background .15s;
+            align-items: flex-start;
+        }
+        .transcript-line:hover {
+            background: rgba(124, 58, 237, .08);
+        }
+        .ts-link {
+            color: var(--accent2);
+            font-family: 'SF Mono', 'Menlo', monospace;
+            font-size: 12px;
+            text-decoration: none;
+            background: rgba(124, 58, 237, .12);
+            padding: 2px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            cursor: pointer;
+            flex-shrink: 0;
+            margin-top: 2px;
+            transition: background .15s, color .15s;
+        }
+        .ts-link:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+        .transcript-text {
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        /* ── 进度指示 ── */
+        .progress-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text2);
+            gap: 12px;
+        }
+        .progress-wrap .spinner-lg {
+            width: 32px; height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+        }
+        .progress-info {
+            font-size: 13px;
+            text-align: center;
+        }
+        /* 转录进度条 */
+        .progress-bar-wrap {
+            width: 280px;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 4px;
+            transition: width .3s ease;
+        }
+        .progress-percent {
+            font-size: 22px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .progress-detail {
+            font-size: 11px;
+            color: var(--text2);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── 右侧: 聊天区 ── */
+        .panel-right {
+            width: 420px;
+            min-width: 340px;
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+        }
+        .chat-header {
+            padding: 14px 18px;
+            font-weight: 600;
+            font-size: 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-messages::-webkit-scrollbar { width: 5px; }
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        .chat-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text2);
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .msg {
+            max-width: 92%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+        .msg-user {
+            align-self: flex-end;
+            background: var(--accent);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .msg-ai {
+            align-self: flex-start;
+            background: var(--surface2);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+        }
+        .msg-ai p { margin: 4px 0; }
+        .msg-ai strong { color: var(--text-strong); }
+        .msg-ai ul, .msg-ai ol { padding-left: 18px; margin: 4px 0; }
+        .msg-ai code {
+            background: rgba(124,58,237,.15);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        .chat-input-wrap {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input-wrap textarea {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            min-height: 42px;
+            transition: border-color .2s;
+        }
+        .chat-input-wrap textarea:focus { border-color: var(--accent); }
+        .chat-input-wrap textarea::placeholder { color: var(--text2); }
+        .btn-send {
+            padding: 10px 16px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: opacity .2s;
+            align-self: flex-end;
+        }
+        .btn-send:hover { opacity: .85; }
+        .btn-send:disabled { opacity: .4; cursor: not-allowed; }
+        .btn-voice {
+            padding: 10px 12px;
+            background: var(--surface);
+            color: var(--text2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all .25s;
+            align-self: flex-end;
+            line-height: 1;
+            position: relative;
+        }
+        .btn-voice:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-voice:disabled { opacity: .4; cursor: not-allowed; }
+        .btn-voice.recording {
+            background: color-mix(in srgb, #ef4444 12%, transparent);
+            border-color: #ef4444;
+            color: #ef4444;
+            animation: voicePulse 1.2s ease-in-out infinite;
+        }
+        @keyframes voicePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.3); }
+            50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+        }
+
+        /* ── 分隔线拖拽（可选） ── */
+        .divider {
+            width: 2px;
+            cursor: col-resize;
+            background: var(--border);
+            transition: background .2s;
+        }
+        .divider:hover { background: var(--accent); }
+
+        /* ── 响应式 ── */
+        @media (max-width: 768px) {
+            .main { flex-direction: column; }
+            .col-splitter { display: none !important; }
+            .panel-right { width: 100%; min-width: 0; height: 50%; }
+            .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶栏 -->
+    <div class="topbar">
+        <div class="logo">📺 ZimuAI</div>
+        <div class="url-input-wrap">
+            <input type="text" id="urlInput" 
+                   placeholder="粘贴 Bilibili 或 YouTube 视频链接..." 
+                   autocomplete="off" spellcheck="false">
+            <button class="btn-primary" id="btnProcess" onclick="startProcess()">
+                🚀 开始分析
+            </button>
+        </div>
+
+        <select class="theme-select" id="themeSelect" title="选择界面风格">
+            <option value="happy">🌞 开心</option>
+            <option value="candy">🍬 糖果</option>
+            <option value="night">🌙 夜空</option>
+        </select>
+
+        <div class="layout-controls">
+            <button class="btn-layout" id="btnToggleSidebar" title="显示/隐藏项目栏">🗂 栏</button>
+            <button class="btn-layout" id="btnLockSidebar" title="锁定项目栏宽度">🔒 栏</button>
+            <button class="btn-layout" id="btnLockChat" title="锁定聊天栏宽度">🔒 聊</button>
+            <button class="btn-layout" id="btnToggleChat" title="显示/隐藏聊天栏">💬 栏</button>
+        </div>
+    </div>
+
+    <!-- 状态条 -->
+    <div class="status-bar" id="statusBar">
+        <span>就绪 — 输入视频链接开始使用</span>
+    </div>
+
+    <!-- 主体 -->
+    <div class="main">
+        <!-- 左侧：历史项目 -->
+        <div class="sidebar main-col" id="sidebarCol">
+            <div class="sidebar-header">
+                <div class="sidebar-title">🗂 历史项目</div>
+                <div class="sidebar-actions">
+                    <button class="btn-mini" onclick="classifyAllProjects()" title="为无标签项目批量分类">🏷️ 分类</button>
+                    <button class="btn-mini" onclick="refreshProjects()">↻ 刷新</button>
+                    <button class="btn-mini" onclick="newProjectView()">＋ 新建</button>
+                </div>
+            </div>
+            <div class="tag-filter-bar" id="tagFilterBar">
+                <!-- 标签筛选 chips 由 JS 渲染 -->
+            </div>
+            <div class="project-list" id="projectList">
+                <div class="project-empty">加载中…</div>
+            </div>
+        </div>
+
+        <div class="col-splitter" id="splitterLeft" title="拖拽调整项目栏宽度"></div>
+
+        <!-- 左侧：总结 + 字幕 -->
+        <div class="main-col" id="centerCol">
+            <!-- Tab 栏 -->
+            <div class="tab-bar" id="tabBar" style="display:none;">
+                <button class="tab-btn active" data-tab="summary" onclick="switchTab('summary')">📋 AI 总结</button>
+                <button class="tab-btn" data-tab="transcript" onclick="switchTab('transcript')">📝 原始字幕 <span class="tab-badge" id="segCountBadge" style="display:none;">0</span></button>
+            </div>
+
+            <!-- 内容区域 -->
+            <div class="panel-left" id="panelLeft">
+                <!-- 视频元信息（有任务/项目时显示） -->
+                <div class="video-card" id="videoCard" style="display:none;">
+                    <a id="videoLink" href="#" target="_blank" title="打开视频">
+                        <img id="videoCover" class="video-cover" alt="cover" />
+                    </a>
+                    <div class="video-info">
+                        <div style="display:flex;align-items:center;">
+                            <div class="video-title" id="videoTitle" contenteditable="false">视频标题</div>
+                            <span class="title-edit-hint" id="titleEditHint">✏️ 点击编辑</span>
+                        </div>
+                        <div class="video-sub">
+                            <a id="videoUploaderLink" href="#" target="_blank" style="display:flex;align-items:center;gap:6px;text-decoration:none;color:inherit;">
+                                <img id="videoUploaderAvatar" style="width:24px;height:24px;border-radius:50%;object-fit:cover;display:none;" alt="" />
+                                <span id="videoUploader">👤</span>
+                            </a>
+                            <span id="videoDate">🗓</span>
+                            <span class="tag-selector" id="tagSelectorWrap">
+                                🏷️ <select id="tagSelect" onchange="onTagSelectChange(this.value)">
+                                    <option value="">未分类</option>
+                                </select>
+                            </span>
+                            <a class="video-link" id="videoUrlText" href="#" target="_blank">打开原视频</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="empty-state" id="emptyState">
+                    <div class="icon">🎬</div>
+                    <h2>视频内容 AI 总结</h2>
+                    <p>输入 Bilibili / YouTube 视频链接<br>
+                       自动提取字幕 → AI 深度总结 → 即时预览<br><br>
+                       <span style="color: var(--accent2);">✨ 优先使用官方字幕，无字幕时自动转录</span>
+                    </p>
+                </div>
+                <!-- 进度指示（处理中显示） -->
+                <div id="progressPanel" style="display:none;">
+                    <div class="progress-wrap">
+                        <div class="spinner-lg" id="progressSpinner"></div>
+                        <div class="progress-percent" id="progressPercent" style="display:none;">0%</div>
+                        <div class="progress-bar-wrap" id="progressBarWrap" style="display:none;">
+                            <div class="progress-bar-fill" id="progressBarFill"></div>
+                        </div>
+                        <div class="progress-info" id="progressInfo">正在处理...</div>
+                        <div class="progress-detail" id="progressDetail" style="display:none;"></div>
+                    </div>
+                </div>
+                <!-- AI 总结 Tab -->
+                <div class="markdown-body" id="summaryContent" style="display:none;"></div>
+                <!-- 原始字幕 Tab -->
+                <div class="transcript-panel" id="transcriptContent" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div class="col-splitter" id="splitterRight" title="拖拽调整聊天栏宽度"></div>
+
+        <!-- 右侧：聊天 -->
+        <div class="panel-right main-col" id="chatCol">
+            <div class="chat-header">
+                💬 AI 助手 · 基于视频内容对话
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-empty" id="chatEmpty">
+                    视频分析完成后，你可以在这里<br>
+                    针对视频内容进行提问和讨论 🗣️
+                </div>
+            </div>
+            <div class="chat-input-wrap">
+                <textarea id="chatInput" placeholder="输入你的问题..." rows="1" 
+                          disabled onkeydown="handleChatKey(event)"></textarea>
+                <button class="btn-voice" id="btnVoice" disabled onclick="toggleVoiceInput()" title="语音输入">🎙️</button>
+                <button class="btn-send" id="btnSend" disabled onclick="sendChat()">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入 marked.js 用于 Markdown 渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        // ── 状态 ──
+        let currentTaskId = null;
+        let currentTranscript = '';
+        let currentVideoUrl = '';
+        let chatSessionId = '';
+        let currentProjectId = '';
+        let pollTimer = null;
+        let chatEnabled = false;
+        let currentTab = 'summary';
+        let currentThumbnail = '';
+        let activeTagFilter = '';    // 当前筛选的标签，空=全部
+        let allTags = [];            // 全部标签列表
+        let allProjects = [];        // 缓存项目列表（用于前端筛选）
+        let currentProjectTag = '';  // 当前项目的标签
+        let layoutState = {
+            sidebarWidth: 300,
+            chatWidth: 420,
+            sidebarVisible: true,
+            chatVisible: true,
+            sidebarLocked: false,
+            chatLocked: false,
+        };
+
+        function buildThumbProxyUrl(projectId, thumbUrl) {
+            if (!projectId) return '';
+            const q = thumbUrl ? ('?src=' + encodeURIComponent(thumbUrl)) : '';
+            return `/api/projects/${encodeURIComponent(projectId)}/thumbnail${q}`;
+        }
+
+        function loadLayoutState() {
+            try {
+                const raw = localStorage.getItem('zimu_layout_state');
+                if (!raw) return;
+                layoutState = { ...layoutState, ...JSON.parse(raw) };
+            } catch (e) {}
+        }
+
+        function saveLayoutState() {
+            localStorage.setItem('zimu_layout_state', JSON.stringify(layoutState));
+        }
+
+        function applyLayoutState() {
+            const sidebar = document.getElementById('sidebarCol');
+            const chat = document.getElementById('chatCol');
+            const splitL = document.getElementById('splitterLeft');
+            const splitR = document.getElementById('splitterRight');
+
+            if (!sidebar || !chat || !splitL || !splitR) return;
+
+            sidebar.classList.toggle('hidden', !layoutState.sidebarVisible);
+            chat.classList.toggle('hidden', !layoutState.chatVisible);
+            splitL.classList.toggle('hidden', !layoutState.sidebarVisible);
+            splitR.classList.toggle('hidden', !layoutState.chatVisible);
+            splitL.classList.toggle('locked', layoutState.sidebarLocked);
+            splitR.classList.toggle('locked', layoutState.chatLocked);
+
+            const sw = Math.max(220, Math.min(560, Number(layoutState.sidebarWidth) || 300));
+            const cw = Math.max(320, Math.min(860, Number(layoutState.chatWidth) || 420));
+            layoutState.sidebarWidth = sw;
+            layoutState.chatWidth = cw;
+
+            sidebar.style.flex = `0 0 ${sw}px`;
+            sidebar.style.width = `${sw}px`;
+            chat.style.flex = `0 0 ${cw}px`;
+            chat.style.width = `${cw}px`;
+
+            document.getElementById('btnToggleSidebar')?.classList.toggle('active', layoutState.sidebarVisible);
+            document.getElementById('btnToggleChat')?.classList.toggle('active', layoutState.chatVisible);
+            document.getElementById('btnLockSidebar')?.classList.toggle('active', layoutState.sidebarLocked);
+            document.getElementById('btnLockChat')?.classList.toggle('active', layoutState.chatLocked);
+
+            saveLayoutState();
+        }
+
+        function setupLayoutControls() {
+            const splitL = document.getElementById('splitterLeft');
+            const splitR = document.getElementById('splitterRight');
+
+            splitL?.addEventListener('mousedown', (e) => {
+                if (layoutState.sidebarLocked || !layoutState.sidebarVisible) return;
+                e.preventDefault();
+                const startX = e.clientX;
+                const startW = layoutState.sidebarWidth;
+                const onMove = (ev) => {
+                    layoutState.sidebarWidth = startW + (ev.clientX - startX);
+                    applyLayoutState();
+                };
+                const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+            });
+
+            splitR?.addEventListener('mousedown', (e) => {
+                if (layoutState.chatLocked || !layoutState.chatVisible) return;
+                e.preventDefault();
+                const startX = e.clientX;
+                const startW = layoutState.chatWidth;
+                const onMove = (ev) => {
+                    layoutState.chatWidth = startW - (ev.clientX - startX);
+                    applyLayoutState();
+                };
+                const onUp = () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+            });
+
+            document.getElementById('btnToggleSidebar')?.addEventListener('click', () => {
+                layoutState.sidebarVisible = !layoutState.sidebarVisible;
+                applyLayoutState();
+            });
+            document.getElementById('btnToggleChat')?.addEventListener('click', () => {
+                layoutState.chatVisible = !layoutState.chatVisible;
+                applyLayoutState();
+            });
+            document.getElementById('btnLockSidebar')?.addEventListener('click', () => {
+                layoutState.sidebarLocked = !layoutState.sidebarLocked;
+                applyLayoutState();
+            });
+            document.getElementById('btnLockChat')?.addEventListener('click', () => {
+                layoutState.chatLocked = !layoutState.chatLocked;
+                applyLayoutState();
+            });
+        }
+
+        // ── 主题切换 ──
+        function applyTheme(theme) {
+            const t = theme || 'happy';
+            if (t === 'happy') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', t);
+            }
+            localStorage.setItem('zimu_theme', t);
+        }
+
+        // 绑定主题选择器
+        document.getElementById('themeSelect').addEventListener('change', (e) => {
+            applyTheme(e.target.value);
+        });
+
+        // ── 视频元信息渲染 ──
+        function renderVideoMeta(obj) {
+            const card = document.getElementById('videoCard');
+            if (!card) return;
+
+            const url = (obj && obj.video_url) ? String(obj.video_url) : (currentVideoUrl || '');
+            const title = (obj && obj.title) ? String(obj.title).trim() : '';
+            const uploader = (obj && obj.uploader) ? String(obj.uploader).trim() : '';
+            const date = (obj && obj.upload_date) ? String(obj.upload_date).trim() : '';
+            const thumb = (obj && obj.thumbnail) ? String(obj.thumbnail).trim() : '';
+            currentThumbnail = thumb || currentThumbnail;
+
+            if (!url && !title && !thumb) {
+                card.style.display = 'none';
+                return;
+            }
+
+            card.style.display = 'flex';
+            const linkEl = document.getElementById('videoLink');
+            const urlTextEl = document.getElementById('videoUrlText');
+
+            if (url) {
+                linkEl.href = url;
+                urlTextEl.href = url;
+                urlTextEl.style.display = 'inline';
+            } else {
+                urlTextEl.style.display = 'none';
+            }
+
+            document.getElementById('videoTitle').textContent = title || displayTitle({ title: '', video_url: url });
+            document.getElementById('videoUploader').textContent = uploader ? ('👤 ' + uploader) : '👤 未知作者';
+            document.getElementById('videoDate').textContent = date ? ('🗓 ' + date) : '';
+
+            // 作者主页链接
+            const uploaderUrl = (obj && obj.uploader_url) ? String(obj.uploader_url).trim() : '';
+            const uploaderLinkEl = document.getElementById('videoUploaderLink');
+            if (uploaderUrl) {
+                uploaderLinkEl.href = uploaderUrl;
+                uploaderLinkEl.title = '访问作者主页';
+                uploaderLinkEl.style.cursor = 'pointer';
+            } else {
+                uploaderLinkEl.removeAttribute('href');
+                uploaderLinkEl.style.cursor = 'default';
+            }
+
+            // 作者头像
+            const avatarEl = document.getElementById('videoUploaderAvatar');
+            const avatarUrl = (obj && obj.uploader_avatar) ? String(obj.uploader_avatar).trim() : '';
+            const pidForAvatar = (obj && obj.id) ? obj.id : (currentProjectId || currentTaskId);
+            if (avatarUrl && pidForAvatar) {
+                const avatarProxyUrl = `/api/projects/${encodeURIComponent(pidForAvatar)}/avatar`;
+                avatarEl.src = avatarProxyUrl;
+                avatarEl.style.display = 'inline-block';
+                avatarEl.onerror = function() { this.style.display = 'none'; };
+            } else {
+                avatarEl.style.display = 'none';
+            }
+
+            const img = document.getElementById('videoCover');
+            const pid = (obj && obj.id) ? obj.id : (currentProjectId || currentTaskId);
+            if (thumb || pid) {
+                const proxyUrl = buildThumbProxyUrl(pid, thumb || currentThumbnail);
+                if (proxyUrl) {
+                    img.onerror = function () {
+                        if (thumb) {
+                            this.onerror = null;
+                            this.src = thumb;
+                            this.style.visibility = 'visible';
+                        } else {
+                            this.style.visibility = 'hidden';
+                        }
+                    };
+                    img.src = proxyUrl;
+                } else if (thumb) {
+                    img.src = thumb;
+                }
+                img.style.visibility = 'visible';
+            } else {
+                img.removeAttribute('src');
+                img.style.visibility = 'hidden';
+            }
+        }
+
+        // ── 标签管理 ──
+        async function loadTags() {
+            try {
+                const resp = await fetch('/api/tags');
+                allTags = await resp.json();
+            } catch (e) {
+                allTags = ['政治', '科技', '生活'];
+            }
+            renderTagFilter();
+            renderTagSelect();
+        }
+
+        function renderTagFilter() {
+            const bar = document.getElementById('tagFilterBar');
+            // 计算各标签的项目数量
+            const totalCount = allProjects.length;
+            const favCount = allProjects.filter(p => p.favorite).length;
+            const tagCounts = {};
+            for (const tag of allTags) tagCounts[tag] = 0;
+            for (const p of allProjects) {
+                if (p.tag && tagCounts.hasOwnProperty(p.tag)) tagCounts[p.tag]++;
+            }
+            let html = '';
+            // "全部" chip
+            html += `<span class="tag-chip${activeTagFilter === '' ? ' active' : ''}" onclick="setTagFilter('')">全部 <span class="tag-count">${totalCount}</span></span>`;
+            // ⭐ 收藏 chip
+            html += `<span class="tag-chip${activeTagFilter === '⭐' ? ' active' : ''}" onclick="setTagFilter('⭐')">⭐ 收藏${favCount ? ` <span class="tag-count">${favCount}</span>` : ''}</span>`;
+            for (const tag of allTags) {
+                const active = (activeTagFilter === tag) ? ' active' : '';
+                const cnt = tagCounts[tag] || 0;
+                html += `<span class="tag-chip${active}" onclick="setTagFilter('${escapeHtml(tag)}')">${escapeHtml(tag)}${cnt ? ` <span class="tag-count">${cnt}</span>` : ''}<span class="tag-del" onclick="event.stopPropagation(); removeTag('${escapeHtml(tag)}')" title="删除标签">✕</span></span>`;
+            }
+            html += `<span class="tag-chip-add" onclick="addNewTag()">＋</span>`;
+            bar.innerHTML = html;
+        }
+
+        function renderTagSelect() {
+            const sel = document.getElementById('tagSelect');
+            let html = '<option value="">未分类</option>';
+            for (const tag of allTags) {
+                const selected = (tag === currentProjectTag) ? ' selected' : '';
+                html += `<option value="${escapeHtml(tag)}"${selected}>${escapeHtml(tag)}</option>`;
+            }
+            sel.innerHTML = html;
+        }
+
+        function setTagFilter(tag) {
+            activeTagFilter = tag;
+            renderTagFilter();
+            renderProjectList(allProjects);
+        }
+
+        async function addNewTag() {
+            const name = prompt('请输入新标签名称：');
+            if (!name || !name.trim()) return;
+            try {
+                const resp = await fetch('/api/tags', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name.trim() })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                allTags = data.tags;
+                renderTagFilter();
+                renderTagSelect();
+            } catch (e) {
+                alert('添加失败: ' + e.message);
+            }
+        }
+
+        async function removeTag(name) {
+            if (!confirm(`确认删除标签「${name}」吗？已分类的项目标签不会被清除。`)) return;
+            try {
+                const resp = await fetch('/api/tags', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                allTags = data.tags;
+                if (activeTagFilter === name) activeTagFilter = '';
+                renderTagFilter();
+                renderTagSelect();
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        }
+
+        async function onTagSelectChange(tag) {
+            currentProjectTag = tag;
+            const pid = currentProjectId || currentTaskId;
+            if (!pid || pid === '__new__') return;
+            try {
+                await fetch('/api/projects/' + pid, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag })
+                });
+                await refreshProjects();
+            } catch (e) {
+                console.error('更新标签失败:', e);
+            }
+        }
+
+        async function classifyAllProjects() {
+            if (!confirm('将为所有未分类的项目自动添加标签，确认？')) return;
+            showStatus('🏷️ 正在批量分类…', '');
+            try {
+                const resp = await fetch('/api/classify-all', { method: 'POST' });
+                const data = await resp.json();
+                if (data.error) {
+                    showStatus('❌ ' + data.error, 'error');
+                    return;
+                }
+                showStatus(`🏷️ 分类完成：${data.classified} 个成功，${data.failed} 个失败`, 'success');
+                await refreshProjects();
+            } catch (e) {
+                showStatus('❌ 批量分类失败: ' + e.message, 'error');
+            }
+        }
+
+        // ── 项目列表 ──
+        async function refreshProjects() {
+            const listEl = document.getElementById('projectList');
+            try {
+                const resp = await fetch('/api/projects');
+                allProjects = await resp.json();
+                renderProjectList(allProjects);
+            } catch (e) {
+                listEl.innerHTML = '<div class="project-empty">❌ 加载失败</div>';
+            }
+        }
+
+        function sourcePill(source) {
+            if (source === 'official') return '<span class="pill pill-ok">官方</span>';
+            if (source === 'auto_generated') return '<span class="pill pill-a">自动</span>';
+            if (source === 'whisper') return '<span class="pill pill-w">Whisper</span>';
+            return '<span class="pill">未知</span>';
+        }
+
+        function statusPill(p) {
+            const s = (p && p.status) ? String(p.status) : '';
+            const pct = (p && typeof p.transcribe_percent === 'number') ? p.transcribe_percent : 0;
+            if (s === 'done') return '';
+            if (s === 'error') return '<span class="pill" style="border-color: color-mix(in srgb, var(--error) 45%, transparent); color: var(--error);">失败</span>';
+            if (s === 'transcribing') {
+                const n = pct > 0 ? Math.floor(pct) + '%' : '转录中';
+                return `<span class="pill" style="border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent);">${n}</span>`;
+            }
+            if (s === 'downloading') return '<span class="pill" style="border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn);">下载中</span>';
+            if (s === 'checking_subtitles') return '<span class="pill" style="border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn);">检测字幕</span>';
+            if (s === 'summarizing') return '<span class="pill" style="border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn);">总结中</span>';
+            if (s === 'pending') return '<span class="pill">排队中</span>';
+            return '<span class="pill">处理中</span>';
+        }
+
+        function displayTitle(p) {
+            const t = (p && p.title) ? String(p.title).trim() : '';
+            // 后端可能已经给了一个短 title（如：B站 BVxxxx / YouTube xxxx）
+            if (t && t !== '未命名项目' && t !== '未命名项目 ') return t;
+
+            const u = (p && p.video_url) ? String(p.video_url).trim() : '';
+            const nice = inferTitleFromUrl(u);
+            if (nice) return nice;
+            if (u) return u;
+            return '未命名项目';
+        }
+
+        function inferTitleFromUrl(url) {
+            if (!url) return '';
+            try {
+                const u = new URL(url);
+                const host = (u.hostname || '').toLowerCase();
+                const path = u.pathname || '';
+
+                // bilibili.com/video/BVxxxx
+                if (host.includes('bilibili.com')) {
+                    const m = path.match(/\/video\/(BV[0-9A-Za-z]+)/i);
+                    if (m && m[1]) return 'B站 ' + m[1];
+                    return 'B站视频';
+                }
+                // b23.tv/xxxx
+                if (host.endsWith('b23.tv')) {
+                    const code = path.replace(/^\/+|\/+$/g, '').split('/')[0];
+                    return code ? ('B站短链 ' + code) : 'B站短链';
+                }
+                // youtube
+                if (host.includes('youtube.com')) {
+                    const vid = u.searchParams.get('v');
+                    return vid ? ('YouTube ' + vid) : 'YouTube 视频';
+                }
+                if (host.endsWith('youtu.be')) {
+                    const vid = path.replace(/^\/+|\/+$/g, '').split('/')[0];
+                    return vid ? ('YouTube ' + vid) : 'YouTube 视频';
+                }
+            } catch (e) {
+                // 非标准 URL，尽量短显示
+                if (url.length > 48) return url.slice(0, 48) + '…';
+                return url;
+            }
+            // 其他站点：截断显示
+            return url.length > 48 ? url.slice(0, 48) + '…' : url;
+        }
+
+        function renderProjectList(projects) {
+            const listEl = document.getElementById('projectList');
+            let html = '';
+
+            // 新建项目占位卡片
+            if (currentProjectId === '__new__') {
+                html += `
+                <div class="project-item active" style="border-style:dashed;">
+                    <div class="project-row">
+                        <div class="project-name" style="color:var(--accent);">✨ 新项目</div>
+                        <div class="project-right">
+                            <span class="pill" style="border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent);">待输入</span>
+                        </div>
+                    </div>
+                    <div class="project-meta">
+                        <span>粘贴视频链接开始分析</span>
+                    </div>
+                </div>`;
+            }
+
+            // 按标签/收藏筛选
+            let filtered = Array.isArray(projects) ? projects : [];
+            if (activeTagFilter === '⭐') {
+                filtered = filtered.filter(p => p.favorite);
+            } else if (activeTagFilter) {
+                filtered = filtered.filter(p => (p.tag || '') === activeTagFilter);
+            }
+
+            if (filtered.length === 0) {
+                if (!html) {
+                    let msg = '还没有项目。\n\n在上方粘贴链接并开始分析。';
+                    if (activeTagFilter === '⭐') msg = '还没有收藏的项目';
+                    else if (activeTagFilter) msg = `「${escapeHtml(activeTagFilter)}」下还没有项目`;
+                    listEl.innerHTML = `<div class="project-empty">${msg}</div>`;
+                    return;
+                }
+                listEl.innerHTML = html;
+                return;
+            }
+
+            // 按日期分组
+            let lastDateLabel = '';
+            for (const p of filtered) {
+                // 从 created_at (如 "2025-07-09 14:30:00") 提取日期标签
+                const dateLabel = _extractDateLabel(p.created_at || '');
+                if (dateLabel && dateLabel !== lastDateLabel) {
+                    html += `<div class="date-group-header">${escapeHtml(dateLabel)}</div>`;
+                    lastDateLabel = dateLabel;
+                }
+
+                const active = (p.id === currentProjectId) ? ' active' : '';
+                const title = escapeHtml(displayTitle(p));
+                const isFav = p.favorite ? true : false;
+                const favClass = isFav ? ' is-fav' : '';
+                const favIcon = isFav ? '★' : '☆';
+                const tagHtml = p.tag ? `<span class="project-tag">${escapeHtml(p.tag)}</span>` : '';
+                const uploader = p.uploader ? escapeHtml(p.uploader) : '';
+                const uploadDate = p.upload_date ? escapeHtml(p.upload_date) : '';
+                const metaParts = [uploader, uploadDate].filter(Boolean).join(' · ');
+                const thumbSrc = p.thumbnail ? buildThumbProxyUrl(p.id, p.thumbnail) : '';
+                html += `
+                <div class="project-item${active}" data-id="${p.id}" onclick="loadProject('${p.id}')">
+                    <div class="project-row">
+                        ${thumbSrc ? `<img class="project-thumb" src="${thumbSrc}" loading="lazy" onerror="this.style.display='none'">` : ''}
+                        <div style="flex:1;min-width:0">
+                            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                                <div class="project-name">${title}</div>
+                                <div class="project-right">
+                                    <div class="project-right-row">
+                                        <button class="project-fav${favClass}" title="${isFav ? '取消收藏' : '收藏'}" onclick="event.stopPropagation(); toggleFavorite('${p.id}', ${!isFav})">${favIcon}</button>
+                                        ${statusPill(p)}
+                                        <button class="project-del" title="删除" onclick="event.stopPropagation(); deleteProject('${p.id}')">✕</button>
+                                    </div>
+                                    ${tagHtml}
+                                </div>
+                            </div>
+                            ${metaParts ? `<div class="project-meta"><span>${metaParts}</span></div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+            }
+            listEl.innerHTML = html;
+        }
+
+        function _extractDateLabel(createdAt) {
+            if (!createdAt) return '';
+            // "2025-07-09 14:30:00" → "07/09"
+            const m = createdAt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (!m) return '';
+            const year = m[1];
+            const month = m[2];
+            const day = m[3];
+            const now = new Date();
+            const currentYear = String(now.getFullYear());
+            if (year === currentYear) {
+                return `${month}/${day}`;
+            }
+            return `${year}/${month}/${day}`;
+        }
+
+        async function toggleFavorite(projectId, newState) {
+            try {
+                await fetch('/api/projects/' + projectId, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ favorite: newState })
+                });
+                // 更新本地缓存
+                const p = allProjects.find(x => x.id === projectId);
+                if (p) p.favorite = newState;
+                renderProjectList(allProjects);
+            } catch (e) {
+                console.error('收藏失败:', e);
+            }
+        }
+
+        async function deleteProject(projectId) {
+            if (!confirm('确认删除该项目吗？')) return;
+            try {
+                const resp = await fetch('/api/projects/' + projectId, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.ok) {
+                    if (currentProjectId === projectId) {
+                        newProjectView();
+                    }
+                    await refreshProjects();
+                } else {
+                    alert(data.error || '删除失败');
+                }
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        }
+
+        function newProjectView() {
+            // 清空主视图，但保留项目列表
+            currentTaskId = null;
+            currentProjectId = '__new__';  // 标记为新建项目
+            currentTranscript = '';
+            currentVideoUrl = '';
+            currentThumbnail = '';
+            chatSessionId = '';
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+
+            document.getElementById('btnProcess').disabled = false;
+            document.getElementById('tabBar').style.display = 'none';
+            document.getElementById('segCountBadge').style.display = 'none';
+            document.getElementById('progressPanel').style.display = 'none';
+            document.getElementById('summaryContent').style.display = 'none';
+            document.getElementById('summaryContent').innerHTML = '';
+            document.getElementById('transcriptContent').style.display = 'none';
+            document.getElementById('transcriptContent').innerHTML = '';
+            document.getElementById('videoCard').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'flex';
+            resetChat();
+            showStatus('就绪 — 输入视频链接开始使用', '');
+            history.replaceState(null, '', location.pathname);
+            refreshProjects();
+            // 聚焦到输入框
+            const urlInput = document.getElementById('urlInput');
+            if (urlInput) urlInput.focus();
+        }
+
+        async function loadProject(projectId) {
+            try {
+                const resp = await fetch('/api/projects/' + projectId);
+                const p = await resp.json();
+                if (p.error) {
+                    showStatus('❌ ' + p.error, 'error');
+                    return;
+                }
+                currentProjectId = p.id;
+                // 如果项目仍在处理中，则附着到轮询上
+                const isRunning = p.status && !['done', 'error'].includes(p.status);
+                currentTaskId = isRunning ? p.id : null;
+                chatSessionId = 'session_' + p.id;
+                currentVideoUrl = p.video_url || '';
+                currentTranscript = p.transcript || '';
+                currentProjectTag = p.tag || '';
+                _lastRenderedSegCount = 0;
+                _lastRenderedMetaKey = '';
+
+                renderVideoMeta(p);
+                renderTagSelect();
+                const tagSelectEl = document.getElementById('tagSelect');
+                if (tagSelectEl) tagSelectEl.value = currentProjectTag;
+
+                if (pollTimer) {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                }
+
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('tabBar').style.display = 'flex';
+
+                // 进行中：展示进度面板，并开始轮询
+                if (isRunning) {
+                    document.getElementById('progressPanel').style.display = 'block';
+                    document.getElementById('summaryContent').style.display = 'none';
+                    document.getElementById('transcriptContent').style.display = 'none';
+                    resetChat();
+                    pollStatus();
+                } else {
+                    document.getElementById('progressPanel').style.display = 'none';
+                }
+
+                renderSummary(p.summary || '');
+                if (p.segments && p.segments.length > 0) {
+                    renderTranscript(p.segments, currentVideoUrl);
+                } else {
+                    document.getElementById('transcriptContent').innerHTML = '<div style="color:var(--text2);text-align:center;padding:40px;">暂无字幕数据</div>';
+                }
+                switchTab('summary');
+                // 渲染聊天历史（可能会重建 chatEmpty）
+                renderChatHistory(p.chat_history || []);
+                if (!isRunning) {
+                    enableChat();
+                }
+
+                // 高亮列表
+                refreshProjects();
+                showStatus(`✅ 已打开：<strong>${escapeHtml(p.title || '未知标题')}</strong>`, 'success');
+                location.hash = '#' + p.id;
+            } catch (e) {
+                showStatus('❌ 加载项目失败: ' + e.message, 'error');
+            }
+        }
+
+        function renderChatHistory(historyList) {
+            const container = document.getElementById('chatMessages');
+            container.innerHTML = '';
+            if (!Array.isArray(historyList) || historyList.length === 0) {
+                container.innerHTML = '<div class="chat-empty" id="chatEmpty">已加载项目。你可以继续追问 🗣️</div>';
+                return;
+            }
+            for (const msg of historyList) {
+                if (!msg || typeof msg !== 'object') continue;
+                if (msg.role === 'user') appendMessage('user', msg.content || '');
+                else if (msg.role === 'assistant') appendMessage('ai', msg.content || '');
+            }
+        }
+
+        // ── Tab 切换 ──
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.tab === tab);
+            });
+            document.getElementById('summaryContent').style.display = tab === 'summary' ? 'block' : 'none';
+            document.getElementById('transcriptContent').style.display = tab === 'transcript' ? 'block' : 'none';
+        }
+
+        // ── 构建视频跳转 URL ──
+        function buildJumpUrl(videoUrl, seconds) {
+            const sec = Math.floor(seconds);
+            try {
+                const u = new URL(videoUrl);
+                // B站
+                if (u.hostname.includes('bilibili.com')) {
+                    u.searchParams.set('t', sec);
+                    return u.toString();
+                }
+                // YouTube
+                if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
+                    u.searchParams.set('t', sec + 's');
+                    return u.toString();
+                }
+            } catch(e) {}
+            return videoUrl;
+        }
+
+        // ── 格式化时间戳 ──
+        function fmtTs(seconds) {
+            const s = Math.floor(seconds);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+            return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        }
+
+        // ── 渲染字幕面板 ──
+        function renderTranscript(segments, videoUrl) {
+            const el = document.getElementById('transcriptContent');
+            if (!segments || segments.length === 0) {
+                el.innerHTML = '<div style="color:var(--text2);text-align:center;padding:40px;">暂无字幕数据</div>';
+                return;
+            }
+            let html = '';
+            for (const seg of segments) {
+                const ts = fmtTs(seg.start);
+                const jumpUrl = buildJumpUrl(videoUrl, seg.start);
+                html += `<div class="transcript-line">` +
+                    `<a class="ts-link" href="${jumpUrl}" target="_blank" title="跳转到视频 ${ts}">${ts}</a>` +
+                    `<span class="transcript-text">${escapeHtml(seg.text)}</span>` +
+                    `</div>`;
+            }
+            el.innerHTML = html;
+
+            // 更新 badge
+            const badge = document.getElementById('segCountBadge');
+            if (badge) {
+                badge.textContent = segments.length;
+                badge.style.display = 'inline-block';
+            }
+        }
+
+        function escapeHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        function extractFirstUrl(raw) {
+            const text = (raw || '').trim();
+            if (!text) return '';
+
+            const direct = text.match(/https?:\/\/[^\s<>"'\u3000]+/i);
+            if (direct && direct[0]) return direct[0].trim();
+
+            const bare = text.match(/(?:b23\.tv|bilibili\.com|youtube\.com|youtu\.be)\/[^\s<>"'\u3000]*/i);
+            if (bare && bare[0]) return `https://${bare[0].trim()}`;
+
+            return '';
+        }
+
+        // ── 开始处理 ──
+        async function startProcess() {
+            const input = document.getElementById('urlInput');
+            const raw = input.value.trim();
+            const url = extractFirstUrl(raw);
+            if (!url) {
+                showStatus('⚠️ 未识别到有效链接，请粘贴完整视频 URL', 'error');
+                return;
+            }
+            if (url !== raw) {
+                input.value = url;
+            }
+
+            // 重置
+            document.getElementById('btnProcess').disabled = true;
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('videoCard').style.display = 'none';
+            document.getElementById('summaryContent').style.display = 'none';
+            document.getElementById('summaryContent').innerHTML = '';
+            document.getElementById('transcriptContent').style.display = 'none';
+            document.getElementById('transcriptContent').innerHTML = '';
+            document.getElementById('tabBar').style.display = 'none';
+            document.getElementById('segCountBadge').style.display = 'none';
+            document.getElementById('progressPanel').style.display = 'block';
+            document.getElementById('progressInfo').textContent = '正在处理...';
+            currentVideoUrl = '';
+            _lastRenderedSegCount = 0;
+            _lastRenderedMetaKey = '';
+            resetChat();
+            showStatus('<div class="spinner"></div> 任务已提交，正在处理...', '');
+
+            try {
+                const resp = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    showStatus('❌ ' + data.error, 'error');
+                    document.getElementById('btnProcess').disabled = false;
+                    document.getElementById('progressPanel').style.display = 'none';
+                    return;
+                }
+                currentTaskId = data.task_id;
+                currentProjectId = data.task_id;  // 立刻关联到真实项目
+                chatSessionId = 'session_' + data.task_id;
+                refreshProjects();  // 刷新列表显示进行中的任务
+                pollStatus();
+            } catch (e) {
+                showStatus('❌ 网络错误: ' + e.message, 'error');
+                document.getElementById('btnProcess').disabled = false;
+                document.getElementById('progressPanel').style.display = 'none';
+            }
+        }
+
+        let _lastRenderedSegCount = 0;   // 上次渲染的字幕段数
+        let _lastRenderedMetaKey = '';    // 上次渲染的视频元信息指纹
+
+        // ── 轮询状态 ──
+        function pollStatus() {
+            if (!currentTaskId) return;
+            pollTimer = setInterval(async () => {
+                try {
+                    const resp = await fetch('/api/status/' + currentTaskId);
+                    const task = await resp.json();
+
+                    // 状态栏
+                    let badge = '';
+                    if (task.subtitle_source === 'official') {
+                        badge = '<span class="subtitle-badge badge-official">官方字幕</span>';
+                    } else if (task.subtitle_source === 'auto_generated') {
+                        badge = '<span class="subtitle-badge badge-auto">自动字幕</span>';
+                    } else if (task.subtitle_source === 'whisper') {
+                        badge = '<span class="subtitle-badge badge-whisper">Whisper 转录</span>';
+                    }
+
+                    let titleInfo = task.title ? `<strong>${task.title}</strong> · ` : '';
+
+                    // 更新进度面板
+                    const progressInfo = document.getElementById('progressInfo');
+                    progressInfo.innerHTML = task.message;
+
+                    // 转录进度条
+                    const pctEl = document.getElementById('progressPercent');
+                    const barWrap = document.getElementById('progressBarWrap');
+                    const barFill = document.getElementById('progressBarFill');
+                    const detailEl = document.getElementById('progressDetail');
+                    const spinnerEl = document.getElementById('progressSpinner');
+
+                    if (task.status === 'transcribing' && task.transcribe_percent > 0) {
+                        pctEl.textContent = Math.floor(task.transcribe_percent) + '%';
+                        pctEl.style.display = 'block';
+                        barWrap.style.display = 'block';
+                        barFill.style.width = task.transcribe_percent + '%';
+                        spinnerEl.style.display = 'none';
+                        // 显示帧数详情
+                        if (task.transcribe_total > 0) {
+                            const cur = task.transcribe_current.toLocaleString();
+                            const tot = task.transcribe_total.toLocaleString();
+                            detailEl.textContent = `${cur} / ${tot} frames`;
+                            detailEl.style.display = 'block';
+                        }
+                    } else {
+                        pctEl.style.display = 'none';
+                        barWrap.style.display = 'none';
+                        detailEl.style.display = 'none';
+                        spinnerEl.style.display = 'block';
+                        if (task.progress) {
+                            progressInfo.innerHTML += `<br><small style="color:var(--accent2)">${task.progress}</small>`;
+                        }
+                    }
+
+                    // 实时更新字幕（仅在段数变化时重新渲染，避免闪烁）
+                    if (task.segments && task.segments.length > 0 && task.video_url) {
+                        currentVideoUrl = task.video_url;
+                        if (task.segments.length !== _lastRenderedSegCount) {
+                            _lastRenderedSegCount = task.segments.length;
+                            renderTranscript(task.segments, task.video_url);
+                        }
+                    }
+
+                    // 展示视频元信息（仅在内容变化时重新渲染，避免封面图片闪烁）
+                    if (task.video_url || task.thumbnail || task.title) {
+                        const metaKey = `${task.title || ''}|${task.uploader || ''}|${task.thumbnail || ''}|${task.uploader_avatar || ''}`;
+                        if (metaKey !== _lastRenderedMetaKey) {
+                            _lastRenderedMetaKey = metaKey;
+                            renderVideoMeta(task);
+                        }
+                    }
+
+                    if (task.status === 'done') {
+                        clearInterval(pollTimer);
+                        showStatus(`✅ ${titleInfo}处理完成 ${badge}`, 'success');
+                        document.getElementById('progressPanel').style.display = 'none';
+
+                        // 显示 Tab 栏
+                        document.getElementById('tabBar').style.display = 'flex';
+
+                        // 渲染总结
+                        renderSummary(task.summary);
+                        switchTab('summary');
+
+                        // 渲染字幕
+                        currentVideoUrl = task.video_url || '';
+                        if (task.segments && task.segments.length > 0) {
+                            renderTranscript(task.segments, currentVideoUrl);
+                        }
+
+                        currentTranscript = task.transcript;
+                        enableChat();
+                        document.getElementById('btnProcess').disabled = false;
+
+                        // 保存完成后刷新项目列表并选中当前项目
+                        currentProjectId = currentTaskId;
+                        refreshProjects();
+                        location.hash = '#' + currentProjectId;
+                    } else if (task.status === 'error') {
+                        clearInterval(pollTimer);
+                        showStatus(task.message, 'error');
+                        document.getElementById('btnProcess').disabled = false;
+                        document.getElementById('progressPanel').style.display = 'none';
+
+                        // 如果有部分字幕也展示
+                        if (task.segments && task.segments.length > 0) {
+                            document.getElementById('tabBar').style.display = 'flex';
+                            renderTranscript(task.segments, task.video_url || '');
+                            switchTab('transcript');
+                        }
+                    } else {
+                        let spinner = '<div class="spinner"></div>';
+                        showStatus(`${spinner} ${titleInfo}${task.message} ${badge}`, '');
+
+                        // 处理中如果有字幕了就显示 tab
+                        if (task.segments && task.segments.length > 0) {
+                            document.getElementById('tabBar').style.display = 'flex';
+                        }
+                    }
+                } catch (e) {
+                    // 网络问题，继续轮询
+                }
+            }, 1500);
+        }
+
+        // ── 渲染总结 ──
+        function renderSummary(markdown) {
+            const el = document.getElementById('summaryContent');
+            let html = marked.parse(markdown);
+
+            // 在总结顶部插入视频封面
+            const pid = currentProjectId || currentTaskId;
+            const coverSrc = buildThumbProxyUrl(pid, currentThumbnail);
+            let coverHtml = '';
+            if (coverSrc) {
+                coverHtml = `<div class="summary-cover-wrap"><img class="summary-cover-img" src="${coverSrc}" alt="视频封面" onerror="this.parentElement.style.display='none'"></div>`;
+            }
+
+            // 后处理：将 [MM:SS] 或 [HH:MM:SS] 或 [MM:SS-MM:SS] 等时间戳替换为可点击跳转链接
+            if (currentVideoUrl) {
+                html = html.replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)(?:\s*[-–—~]\s*(\d{1,2}:\d{2}(?::\d{2})?))?\]/g, (match, tsStart, tsEnd) => {
+                    const parts = tsStart.split(':').map(Number);
+                    let totalSec;
+                    if (parts.length === 3) {
+                        totalSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    } else {
+                        totalSec = parts[0] * 60 + parts[1];
+                    }
+                    const jumpUrl = buildJumpUrl(currentVideoUrl, totalSec);
+                    const display = tsEnd ? `[${tsStart}-${tsEnd}]` : `[${tsStart}]`;
+                    return `<a class="ts-link" href="${jumpUrl}" target="_blank" title="跳转到视频 ${tsStart}">${display}</a>`;
+                });
+            }
+            el.innerHTML = coverHtml + html;
+            el.style.display = 'block';
+        }
+
+        // ── 状态栏 ──
+        function showStatus(html, type) {
+            const bar = document.getElementById('statusBar');
+            bar.innerHTML = html;
+            bar.className = 'status-bar' + (type ? ' ' + type : '');
+        }
+
+        // ── 聊天 ──
+        function enableChat() {
+            chatEnabled = true;
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('btnSend').disabled = false;
+            document.getElementById('btnVoice').disabled = false;
+            const emptyEl = document.getElementById('chatEmpty');
+            if (emptyEl) {
+                emptyEl.textContent = '✅ 已加载项目，现在可以继续提问！';
+            }
+        }
+
+        function resetChat() {
+            chatEnabled = false;
+            document.getElementById('chatInput').disabled = true;
+            document.getElementById('btnSend').disabled = true;
+            document.getElementById('btnVoice').disabled = true;
+            stopVoiceInput();
+            document.getElementById('chatMessages').innerHTML = 
+                '<div class="chat-empty" id="chatEmpty">视频分析完成后，你可以在这里<br>针对视频内容进行提问和讨论 🗣️</div>';
+        }
+
+        let _isComposing = false;
+        document.getElementById('chatInput').addEventListener('compositionstart', () => { _isComposing = true; });
+        document.getElementById('chatInput').addEventListener('compositionend', () => { _isComposing = false; });
+
+        function handleChatKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey && !_isComposing && !e.isComposing) {
+                e.preventDefault();
+                sendChat();
+            }
+        }
+
+        // ── 语音输入 ──
+        let _speechRecognition = null;
+        let _isRecording = false;
+
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return null;
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'zh-CN';
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.maxAlternatives = 1;
+
+            let finalTranscript = '';
+            const input = document.getElementById('chatInput');
+            const cursorBefore = input.value;
+
+            recognition.onresult = (event) => {
+                let interim = '';
+                finalTranscript = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    const t = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += t;
+                    } else {
+                        interim += t;
+                    }
+                }
+                // 把已确认和临时结果拼到输入框
+                input.value = cursorBefore + finalTranscript + interim;
+                autoResizeTextarea(input);
+            };
+
+            recognition.onerror = (event) => {
+                console.warn('语音识别错误:', event.error);
+                if (event.error === 'not-allowed') {
+                    showStatus('⚠️ 麦克风权限被拒绝，请在浏览器设置中允许', 'error');
+                }
+                stopVoiceInput();
+            };
+
+            recognition.onend = () => {
+                // 如果用户没有主动停止，可能是自动超时
+                if (_isRecording) {
+                    stopVoiceInput();
+                }
+            };
+
+            return recognition;
+        }
+
+        function toggleVoiceInput() {
+            if (_isRecording) {
+                stopVoiceInput();
+            } else {
+                startVoiceInput();
+            }
+        }
+
+        function startVoiceInput() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showStatus('⚠️ 当前浏览器不支持语音识别，请使用 Chrome / Edge', 'error');
+                return;
+            }
+            _speechRecognition = initSpeechRecognition();
+            if (!_speechRecognition) return;
+            _isRecording = true;
+            const btn = document.getElementById('btnVoice');
+            btn.classList.add('recording');
+            btn.title = '点击停止录音';
+            _speechRecognition.start();
+            showStatus('🎙️ 正在录音… 说完后点击按钮停止', '');
+        }
+
+        function stopVoiceInput() {
+            _isRecording = false;
+            const btn = document.getElementById('btnVoice');
+            btn.classList.remove('recording');
+            btn.title = '语音输入';
+            if (_speechRecognition) {
+                try { _speechRecognition.stop(); } catch(e) {}
+                _speechRecognition = null;
+            }
+            showStatus('就绪', '');
+        }
+
+        async function sendChat() {
+            if (!chatEnabled) return;
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            input.value = '';
+            autoResizeTextarea(input);
+
+            // 移除空状态提示
+            const emptyEl = document.getElementById('chatEmpty');
+            if (emptyEl) emptyEl.remove();
+
+            // 添加用户消息
+            appendMessage('user', msg);
+
+            // 添加加载指示
+            const loadingId = 'loading_' + Date.now();
+            appendLoading(loadingId);
+
+            // 禁用输入
+            document.getElementById('btnSend').disabled = true;
+            input.disabled = true;
+
+            // 记住发送时的会话 ID，用于判断回来后是否还在同一个项目
+            const sentSessionId = chatSessionId;
+            const sentProjectId = currentProjectId || currentTaskId;
+
+            try {
+                const resp = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sentSessionId,
+                        message: msg,
+                        transcript: currentTranscript
+                    })
+                });
+                const data = await resp.json();
+
+                // 检查用户是否还在同一个会话
+                if (chatSessionId === sentSessionId) {
+                    // 仍在同一项目，正常更新 DOM
+                    removeLoading(loadingId);
+                    if (data.error) {
+                        appendMessage('ai', '❌ ' + data.error);
+                    } else {
+                        appendMessage('ai', data.reply);
+                    }
+                    input.disabled = false;
+                    document.getElementById('btnSend').disabled = false;
+                    input.focus();
+                } else {
+                    // 用户已切换到别的项目，不操作当前 DOM
+                    // 后端已经把回复存到了 chat_history，用户切回来时 loadProject 会加载
+                    // 如果用户此时刚好切回来了，主动刷新一下聊天记录
+                    if (sentProjectId && (currentProjectId === sentProjectId || currentTaskId === sentProjectId)) {
+                        loadProject(sentProjectId);
+                    }
+                }
+            } catch (e) {
+                if (chatSessionId === sentSessionId) {
+                    removeLoading(loadingId);
+                    appendMessage('ai', '❌ 网络错误: ' + e.message);
+                    input.disabled = false;
+                    document.getElementById('btnSend').disabled = false;
+                    input.focus();
+                }
+            }
+        }
+
+        function appendMessage(role, content) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = role === 'user' ? 'msg msg-user' : 'msg msg-ai';
+            if (role === 'ai') {
+                let html = marked.parse(content);
+                // 将 [MM:SS] 或 [MM:SS-MM:SS] 时间戳转为可点击跳转链接
+                if (currentVideoUrl) {
+                    html = html.replace(/\[(\d{1,2}:\d{2}(?::\d{2})?)(?:\s*[-–—~]\s*(\d{1,2}:\d{2}(?::\d{2})?))?\]/g, (match, tsStart, tsEnd) => {
+                        const parts = tsStart.split(':').map(Number);
+                        let totalSec;
+                        if (parts.length === 3) {
+                            totalSec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                        } else {
+                            totalSec = parts[0] * 60 + parts[1];
+                        }
+                        const jumpUrl = buildJumpUrl(currentVideoUrl, totalSec);
+                        const display = tsEnd ? `[${tsStart}-${tsEnd}]` : `[${tsStart}]`;
+                        return `<a class="ts-link" href="${jumpUrl}" target="_blank" title="跳转到视频 ${tsStart}">${display}</a>`;
+                    });
+                }
+                div.innerHTML = html;
+            } else {
+                div.textContent = content;
+            }
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendLoading(id) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = 'msg msg-ai';
+            div.id = id;
+            div.innerHTML = '<div class="spinner" style="display:inline-block;vertical-align:middle;margin-right:8px;"></div> 思考中...';
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeLoading(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        // ── 标题编辑 ──
+        (function setupTitleEditing() {
+            const titleEl = document.getElementById('videoTitle');
+            const hintEl = document.getElementById('titleEditHint');
+
+            titleEl.addEventListener('click', function() {
+                if (!currentProjectId || currentProjectId === '__new__') return;
+                this.contentEditable = 'true';
+                this.focus();
+                // 全选
+                const range = document.createRange();
+                range.selectNodeContents(this);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            });
+
+            titleEl.addEventListener('blur', async function() {
+                this.contentEditable = 'false';
+                const newTitle = this.textContent.trim();
+                if (!newTitle || !currentProjectId || currentProjectId === '__new__') return;
+                try {
+                    await fetch(`/api/projects/${encodeURIComponent(currentProjectId)}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: newTitle })
+                    });
+                    refreshProjects();
+                } catch (e) {
+                    console.error('保存标题失败', e);
+                }
+            });
+
+            titleEl.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.contentEditable = 'false';
+                    // 恢复原标题
+                    loadProject(currentProjectId);
+                }
+            });
+        })();
+
+        // ── 自动调整 textarea 高度 ──
+        const textarea = document.getElementById('chatInput');
+        textarea.addEventListener('input', function() {
+            autoResizeTextarea(this);
+        });
+        function autoResizeTextarea(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+        }
+
+        // ── Enter 提交 URL ──
+        document.getElementById('urlInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                startProcess();
+            }
+        });
+
+        // ── 启动时加载项目列表 & hash 跳转 ──
+        window.addEventListener('load', async () => {
+            loadLayoutState();
+            setupLayoutControls();
+            applyLayoutState();
+
+            const savedTheme = localStorage.getItem('zimu_theme') || 'happy';
+            const sel = document.getElementById('themeSelect');
+            if (sel) sel.value = savedTheme;
+            applyTheme(savedTheme);
+            await loadTags();
+            await refreshProjects();
+            const hashId = (location.hash || '').replace('#', '').trim();
+            if (hashId) {
+                loadProject(hashId);
+            }
+        });
+    </script>
+</body>
+</html>

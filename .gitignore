@@ -1,0 +1,35 @@
+# 密钥
+.env
+
+# 日志文件
+logs/
+
+# 缩略图缓存
+data/thumb_cache/
+
+# 数据文件 (保留 directory structure only)
+data/projects.json
+data/tags.json
+
+# Python缓存
+__pycache__/
+*.pyc
+
+# 音频/视频文件
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# 图片缓存和临时文件
+*.tmp
+*.temp
+
+# 其他敏感文件
+.env.local
+.env.production
+*.key
+*.pem
