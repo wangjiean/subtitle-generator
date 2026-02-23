@@ -94,9 +94,13 @@ def build_timestamped_transcript(segments):
 
 def summarize_with_ai(timestamped_transcript):
     """调用 Gemini API 对字幕进行结构化总结，生成 Markdown"""
-    API_KEY = "AIzaSyA2_EodahfwNUNNnIx_0g_l0lpEy7uuwZ0"
+    API_KEY = os.environ.get("GEMINI_API_KEY", "")
     MODEL_ID = "models/gemini-3-flash-preview"
-    
+
+    if not API_KEY:
+        print("错误：未设置 GEMINI_API_KEY 环境变量")
+        return None
+
     client = genai.Client(api_key=API_KEY)
     
     prompt = f"""你是一位专业的内容分析师。下面是一段视频的字幕文本（带时间戳），是作者的口述内容。
