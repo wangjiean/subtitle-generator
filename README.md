@@ -36,7 +36,8 @@ zimu/
 │   └── thumb_cache/       # 封面/头像图片缓存目录
 ├── logs/
 │   └── zimu.log           # 运行日志（自动轮转，最多 5×2MB）
-├── .env                   # API Key 配置（不提交 Git）
+├── .env.example           # API Key 配置模板（不提交 Git）
+├── .env                   # API Key 配置（本地使用，不提交 Git）
 ├── .gitignore             # Git 忽略规则
 ├── start.sh               # 一键启动脚本（Flask + ngrok）
 ├── zimu.py                # 早期 CLI 版本（已废弃，保留参考）
@@ -89,12 +90,17 @@ zimu/
 | 布局系统 | 列间拖拽分隔条、列显示/隐藏、锁定宽度、localStorage 持久化 |
 | JS 核心函数 | `startProcess()`、`pollStatus()`、`renderSummary()`、`renderVideoMeta()`、`loadProject()` |
 
-### `.env` — 密钥配置
+### `.env.example` — 密钥配置模板
 
 ```env
 # 多个 key 用逗号分隔
-GEMINI_API_KEYS=AIzaXXX,AIzaYYY,AIzaZZZ
+GEMINI_API_KEYS=YOUR_FIRST_API_KEY, YOUR_SECOND_API_KEY, YOUR_THIRD_API_KEY
+
+# 也可以只配单个 key（优先级低于 GEMINI_API_KEYS）
+# GEMINI_API_KEY=YOUR_SINGLE_API_KEY
 ```
+
+**注意**：请勿将 `.env` 文件提交到 Git！复制 `.env.example` 为 `.env` 并填入你的真实 API Keys。
 
 ### `start.sh` — 一键启动
 
@@ -117,8 +123,9 @@ pip install flask yt-dlp google-genai mlx-whisper
 ### 配置 API Key
 
 ```bash
-# 创建 .env 文件
-echo 'GEMINI_API_KEYS=你的KEY1,你的KEY2' > .env
+# 复制模板并编辑
+cp .env.example .env
+# 然后编辑 .env 文件，填入你的 Gemini API Keys
 ```
 
 ### 启动
